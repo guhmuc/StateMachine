@@ -24,6 +24,8 @@ class StateMachine
     LinkedList<State*> *stateList;
 	  bool executeOnce = true; 	//Indicates that a transition to a different state has occurred
     int currentState = -1;	//Indicates the current state number
+    int previousState = -1;
+    unsigned long latestStateChange = 0;
 };
 
 StateMachine::StateMachine(){
@@ -49,11 +51,28 @@ void StateMachine::run(){
     currentState = 0;
   }
   
+  State* current = stateList->get(currentState);
+  int nextState = currentState;
+
   // Execute state logic and return transitioned
   // to state number. 
-  int next = stateList->get(currentState)->execute();
-  executeOnce = (currentState == next)?false:true;
-  currentState = next;
+
+  if ((unsigned long)(millis() - latestStateChange) > current->timeout) {
+    nextState = current->evalTimeoutTransition();
+  }
+  else {
+    nextState = current->execute();
+  }
+
+  if (nextState != currentState) {
+    executeOnce = true;
+    latestStateChange = millis();
+    previousState = currentState;
+    currentState = nextState;
+  }
+  else {
+    executeOnce = false;
+  }
 }
 
 /*

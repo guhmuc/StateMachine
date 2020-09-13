@@ -3,6 +3,8 @@
 #ifndef _STATE_H
 #define _STATE_H
 
+// GUH
+
 /*
  * Transition is a structure that holds the address of 
  * a function that evaluates whether or not not transition
@@ -24,9 +26,12 @@ class State{
     State();
     ~State();
 
-	void addTransition(bool (*c)(), State* s);
+	  void addTransition(bool (*c)(), State* s);
     void addTransition(bool (*c)(), int stateNumber);
+	  void setTimeout(unsigned long timeout_ms, State* s);
+	  void setTimeout(unsigned long timeout_ms, bool (*c)(), State* s);
     int evalTransitions();
+    int evalTimeoutTransition();
     int execute();
     int setTransition(int index, int stateNumber);	//Can now dynamically set the transition
 	
@@ -34,7 +39,9 @@ class State{
     // that represents the state logic
     void (*stateLogic)();
     LinkedList<struct Transition*> *transitions;
-	int index;
+    Transition *timeoutTransition; 
+    unsigned long timeout = 0;
+	  int index;
 };
 
 State::State(){
@@ -54,6 +61,16 @@ State::~State(){};
 void State::addTransition(bool (*conditionFunction)(), State* s){
   struct Transition* t = new Transition{conditionFunction,s->index};
   transitions->add(t);
+}
+
+void State::setTimeout(unsigned long timeout_ms, bool (*conditionFunction)(), State* s){
+  struct Transition* t = new Transition{conditionFunction,s->index};
+  timeoutTransition = t;
+  timeout = timeout_ms;
+}
+
+void State::setTimeout(unsigned long timeout_ms, State* s){
+  setTimeout(timeout_ms, [](){return true;}, s);
 }
 
 /*
@@ -86,6 +103,12 @@ int State::evalTransitions(){
     }
   }
   return index;
+}
+
+int State::evalTimeoutTransition(){
+  if (!timeoutTransition) return index;
+  bool result = timeoutTransition->conditionFunction();
+  return result ? timeoutTransition->stateNumber : index; 
 }
 
 /*
