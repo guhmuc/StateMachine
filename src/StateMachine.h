@@ -16,9 +16,10 @@ class StateMachine
 
     // When a stated is added we pass the function that represents 
     // that state logic
-    State* addState(void (*functionPointer)());
+    State* addState(const char* name, void (*functionPointer)());
     State* transitionTo(State* s);
     int transitionTo(int i);
+    State* getCurrentState();
 	
     // Attributes
     LinkedList<State*> *stateList;
@@ -49,22 +50,26 @@ void StateMachine::run(){
   // Initial condition
   if(currentState == -1){
     currentState = 0;
+    latestStateChange = millis();
   }
   
-  State* current = stateList->get(currentState);
   int nextState = currentState;
+
+  Serial.printf("---\nCurrent state: %s\n", getCurrentState()->name);
 
   // Execute state logic and return transitioned
   // to state number. 
 
-  if ((unsigned long)(millis() - latestStateChange) > current->timeout) {
-    nextState = current->evalTimeoutTransition();
+  if (getCurrentState()->timeout > 0 && (unsigned long)(millis() - latestStateChange) > getCurrentState()->timeout) {
+    Serial.printf("Timeout!\n");
+    nextState = getCurrentState()->evalTimeoutTransition();
   }
   else {
-    nextState = current->execute();
+    nextState = getCurrentState()->execute();
   }
 
   if (nextState != currentState) {
+    Serial.printf("Transition to: %s\n", stateList->get(nextState)->name);
     executeOnce = true;
     latestStateChange = millis();
     previousState = currentState;
@@ -79,8 +84,8 @@ void StateMachine::run(){
  * Adds a state to the machine
  * It adds the state in sequential order.
  */
-State* StateMachine::addState(void(*functionPointer)()){
-  State* s = new State();
+State* StateMachine::addState(const char* name, void(*functionPointer)()){
+  State* s = new State(name);
   s->stateLogic = functionPointer;
   stateList->add(s);
   s->index = stateList->size()-1;
@@ -108,6 +113,10 @@ int StateMachine::transitionTo(int i){
 	return i;
   }
   return currentState;
+}
+
+State* StateMachine::getCurrentState(){
+  return stateList->get(currentState);
 }
 
 #endif

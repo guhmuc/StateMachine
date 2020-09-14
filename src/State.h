@@ -23,7 +23,7 @@ struct Transition{
  */
 class State{
   public:
-    State();
+    State(const char* name);
     ~State();
 
 	  void addTransition(bool (*c)(), State* s);
@@ -42,10 +42,12 @@ class State{
     Transition *timeoutTransition; 
     unsigned long timeout = 0;
 	  int index;
+    const char* name;
 };
 
-State::State(){
+State::State(const char* name){
   transitions = new LinkedList<struct Transition*>();
+  this->name = name;
 };
 
 State::~State(){};
