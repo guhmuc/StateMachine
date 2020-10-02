@@ -26,21 +26,27 @@ class State{
     State(const char* name);
     ~State();
 
-	  void addTransition(bool (*c)(), State* s);
-    void addTransition(bool (*c)(), int stateNumber);
-	  void setTimeout(unsigned long timeout_ms, State* s);
-	  void setTimeout(unsigned long timeout_ms, bool (*c)(), State* s);
+	  State* onUpdate(void (*functionPointer)());
+	  State* onEntry(void (*functionPointer)());
+	  State* onExit(void (*functionPointer)());
+	  State* addTransition(bool (*c)(), State* s);
+    State* addTransition(bool (*c)(), int stateNumber);
+	  State* setTimeout(unsigned long timeout_ms, State* s);
+	  State* setTimeout(unsigned long timeout_ms, bool (*c)(), State* s);
+    State* setDebounce(unsigned long debounce_ms);
     int evalTransitions();
     int evalTimeoutTransition();
     int execute();
     int setTransition(int index, int stateNumber);	//Can now dynamically set the transition
-	
-    // stateLogic is the pointer to the function
-    // that represents the state logic
-    void (*stateLogic)();
+
+    void (*updateLogic)();
+    void (*entryLogic)();
+    void (*exitLogic)();
+
     LinkedList<struct Transition*> *transitions;
     Transition *timeoutTransition; 
     unsigned long timeout = 0;
+    unsigned long debounce = 0;
 	  int index;
     const char* name;
 };
@@ -52,6 +58,21 @@ State::State(const char* name){
 
 State::~State(){};
 
+State* State::onUpdate(void (*functionPointer)()){
+  updateLogic = functionPointer;
+  return this;
+}
+
+State* State::onEntry(void (*functionPointer)()){
+  entryLogic = functionPointer;
+  return this;
+}
+
+State* State::onExit(void (*functionPointer)()){
+  exitLogic = functionPointer;
+  return this;
+}
+
 /*
  * Adds a transition structure to the list of transitions
  * for this state.
@@ -60,19 +81,27 @@ State::~State(){};
  * to determine if the transition occurs
  * state is the state to transition to
  */
-void State::addTransition(bool (*conditionFunction)(), State* s){
+State* State::addTransition(bool (*conditionFunction)(), State* s){
   struct Transition* t = new Transition{conditionFunction,s->index};
   transitions->add(t);
+  return this;
 }
 
-void State::setTimeout(unsigned long timeout_ms, bool (*conditionFunction)(), State* s){
+State* State::setTimeout(unsigned long timeout_ms, bool (*conditionFunction)(), State* s){
   struct Transition* t = new Transition{conditionFunction,s->index};
   timeoutTransition = t;
   timeout = timeout_ms;
+  return this;
 }
 
-void State::setTimeout(unsigned long timeout_ms, State* s){
+State* State::setTimeout(unsigned long timeout_ms, State* s){
   setTimeout(timeout_ms, [](){return true;}, s);
+  return this;
+}
+
+State* State::setDebounce(unsigned long debounce_ms){
+  debounce = debounce_ms;
+  return this;
 }
 
 /*
@@ -83,9 +112,10 @@ void State::setTimeout(unsigned long timeout_ms, State* s){
  * to determine if the transition occurs
  * stateNumber is the number of the state to transition to
  */
-void State::addTransition(bool (*conditionFunction)(), int stateNumber){
+State* State::addTransition(bool (*conditionFunction)(), int stateNumber){
   struct Transition* t = new Transition{conditionFunction,stateNumber};
   transitions->add(t);
+  return this;
 }
 
 /*
@@ -118,10 +148,14 @@ int State::evalTimeoutTransition(){
  * all available transitions. The transition that
  * returns true is returned.
  */
+/*
 int State::execute(){
-  stateLogic();
+  if (updateLogic) {
+    updateLogic();
+  }
   return evalTransitions();
 }
+*/
 
 /*
  * Method to dynamically set a transition

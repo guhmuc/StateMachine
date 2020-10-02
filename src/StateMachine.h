@@ -9,14 +9,16 @@ class StateMachine
   public:
     // Methods
     
-    StateMachine();
+    StateMachine(unsigned long intervall);
     ~StateMachine();
     void init();
     void run();
+    void update();
 
     // When a stated is added we pass the function that represents 
     // that state logic
     State* addState(const char* name, void (*functionPointer)());
+    State* addState(const char* name);
     State* transitionTo(State* s);
     int transitionTo(int i);
     State* getCurrentState();
@@ -26,14 +28,24 @@ class StateMachine
 	  bool executeOnce = true; 	//Indicates that a transition to a different state has occurred
     int currentState = -1;	//Indicates the current state number
     int previousState = -1;
+    unsigned long intervall = 0;
+    unsigned long latestRun = 0;
     unsigned long latestStateChange = 0;
 };
 
-StateMachine::StateMachine(){
-  stateList = new LinkedList<State*>();
+StateMachine::StateMachine(unsigned long intervall = 0){
+  this->stateList = new LinkedList<State*>();
+  this->intervall = intervall;
 };
 
 StateMachine::~StateMachine(){};
+
+void StateMachine::update(){
+  if(currentState == -1 || (unsigned long)(millis() - latestRun) >= intervall){
+    latestRun = millis();
+    run();
+  }
+} 
 
 /*
  * Main execution of the machine occurs here in run
@@ -47,37 +59,52 @@ void StateMachine::run(){
   // Early exit, no states are defined
   if(stateList->size() == 0) return;
 
+  int nextState;
+  executeOnce = false;
+
   // Initial condition
   if(currentState == -1){
-    currentState = 0;
+    executeOnce = true;
     latestStateChange = millis();
+    currentState = 0;
+    previousState = 0;
+    Serial.printf("---\nInitial state: %s\n", getCurrentState()->name);
+    if (getCurrentState()->updateLogic) getCurrentState()->updateLogic();
+    if (getCurrentState()->entryLogic) getCurrentState()->entryLogic();
+    return;
   }
   
-  int nextState = currentState;
-
   Serial.printf("---\nCurrent state: %s\n", getCurrentState()->name);
-
-  // Execute state logic and return transitioned
-  // to state number. 
-
+ 
   if (getCurrentState()->timeout > 0 && (unsigned long)(millis() - latestStateChange) > getCurrentState()->timeout) {
-    Serial.printf("Timeout!\n");
+    Serial.printf("Timeout of state: %s\n", getCurrentState()->name);
     nextState = getCurrentState()->evalTimeoutTransition();
   }
+  else if ((unsigned long)(millis() - latestStateChange) >= getCurrentState()->debounce) {
+    nextState = getCurrentState()->evalTransitions();
+  }
   else {
-    nextState = getCurrentState()->execute();
+    Serial.printf("Locked (debouncing) in  state: %s\n", getCurrentState()->name);
+    nextState = currentState;
   }
 
   if (nextState != currentState) {
-    Serial.printf("Transition to: %s\n", stateList->get(nextState)->name);
     executeOnce = true;
     latestStateChange = millis();
     previousState = currentState;
+    Serial.printf("Transition to: %s\n", stateList->get(nextState)->name);
+    if (getCurrentState()->updateLogic) getCurrentState()->updateLogic();
+    if (getCurrentState()->exitLogic) getCurrentState()->exitLogic();
     currentState = nextState;
+    if (getCurrentState()->updateLogic) getCurrentState()->updateLogic();
+    if (getCurrentState()->entryLogic) getCurrentState()->entryLogic();
   }
   else {
-    executeOnce = false;
+    if (getCurrentState()->updateLogic) getCurrentState()->updateLogic();
   }
+//  else {
+//    executeOnce = false;
+//  }
 }
 
 /*
@@ -86,7 +113,14 @@ void StateMachine::run(){
  */
 State* StateMachine::addState(const char* name, void(*functionPointer)()){
   State* s = new State(name);
-  s->stateLogic = functionPointer;
+  s->updateLogic = functionPointer;
+  stateList->add(s);
+  s->index = stateList->size()-1;
+  return s;
+}
+
+State* StateMachine::addState(const char* name){
+  State* s = new State(name);
   stateList->add(s);
   s->index = stateList->size()-1;
   return s;
