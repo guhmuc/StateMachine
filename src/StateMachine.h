@@ -4,6 +4,14 @@
 #ifndef _STATEMACHINE_H
 #define _STATEMACHINE_H
 
+//#define DEBUG_FSM
+#define DEBUGFSM(fmt, ...)
+#ifdef DEBUG_FSM
+#ifdef DEBUG_ESP_PORT
+#define DEBUGFSM(fmt, ...) DEBUG_ESP_PORT.printf_P( (PGM_P)PSTR(fmt), ##__VA_ARGS__ )
+#endif
+#endif
+
 class StateMachine
 {
   public:
@@ -11,8 +19,10 @@ class StateMachine
     
     StateMachine();
     StateMachine(unsigned long intervall);
+    StateMachine(Print& debug);
+    StateMachine(unsigned long intervall, Print& debug);
     ~StateMachine();
-//    void init();
+    void init();
     void run();
     void update();
 
@@ -23,6 +33,7 @@ class StateMachine
     State* getCurrentState();
 	
     // Attributes
+    //Print& debug;
     LinkedList<State*> *stateList;
 	  bool executeOnce = true; 	//Indicates that a transition to a different state has occurred
     int currentState = -1;	//Indicates the current state number
@@ -41,7 +52,17 @@ StateMachine::StateMachine(unsigned long intervall = 0){
   this->stateList = new LinkedList<State*>();
   this->intervall = intervall;
 };
+/*
+StateMachine::StateMachine(Print& debug){
+  this->stateList = new LinkedList<State*>();
+  this->intervall = 0;
+};
 
+StateMachine::StateMachine(unsigned long intervall = 0, Print& debug){
+  this->stateList = new LinkedList<State*>();
+  this->intervall = intervall;
+};
+*/
 StateMachine::~StateMachine(){};
 
 /*
@@ -93,7 +114,27 @@ int StateMachine::transitionTo(int i){
 }
 
 State* StateMachine::getCurrentState(){
-  return stateList->get(currentState);
+  if (currentState == -1) return NULL;
+  else return stateList->get(currentState);
+}
+
+/*
+ * Initialize the state machine by "transitioning" to the initial state (state 0).
+ * This shoud be called after setting up all states and transitions.
+*/
+void StateMachine::init() {
+  if(stateList->size() == 0) return;
+
+  if(currentState == -1) {
+    executeOnce = true;
+    latestStateChange = millis();
+    currentState = 0;
+    previousState = 0;
+    DEBUG_ESP_PORT.printf("---\nInitial state: %s\n", getCurrentState()->name);
+    if (getCurrentState()->updateLogic) getCurrentState()->updateLogic();
+    if (getCurrentState()->entryLogic) getCurrentState()->entryLogic();
+    return;
+  }
 }
 
 void StateMachine::update(){
@@ -108,32 +149,20 @@ void StateMachine::update(){
  * The current state is executed and it's transitions are evaluated
  * to determine the next state. 
  * 
+ * If init() wasn't explicitly called before, it gets called at the first execution of run().
+ * 
  * By design, only one state is executed in one loop() cycle.
  */
 void StateMachine::run(){
-  // Early exit, no states are defined
-  if(stateList->size() == 0) return;
 
-  //
-  // if this is the very first run, "transition" to the initial state (state 0)
-  //
-
-  if(currentState == -1) {
-    executeOnce = true;
-    latestStateChange = millis();
-    currentState = 0;
-    previousState = 0;
-    Serial.printf("---\nInitial state: %s\n", getCurrentState()->name);
-    if (getCurrentState()->updateLogic) getCurrentState()->updateLogic();
-    if (getCurrentState()->entryLogic) getCurrentState()->entryLogic();
-    return;
-  }
+  if (stateList->size() == 0) return;
+  if (currentState == -1) init();
   
   //
   // call the updte callback on the current state
   //
 
-  Serial.printf("---\nCurrent state: %s\n", getCurrentState()->name);
+  DEBUGFSM("--- Current state: %s\n", getCurrentState()->name);
   if (getCurrentState()->updateLogic) getCurrentState()->updateLogic();
 
   //
@@ -144,12 +173,12 @@ void StateMachine::run(){
 
   // check if we ran into the timeout condition and continue with the timeout state
   if (getCurrentState()->timeout > 0 && (unsigned long)(millis() - latestStateChange) > getCurrentState()->timeout) {
-    Serial.printf("Timeout of state: %s\n", getCurrentState()->name);
+    DEBUGFSM("Timeout of state: %s\n", getCurrentState()->name);
     nextState = getCurrentState()->evalTimeoutTransition();
   }
   // check if the state is debouncew-locked and stay  
   else if ((unsigned long)(millis() - latestStateChange) < getCurrentState()->debounce) {
-    Serial.printf("Locked (debouncing) in  state: %s\n", getCurrentState()->name);
+    DEBUGFSM("Locked (debouncing) in  state: %s\n", getCurrentState()->name);
     nextState = currentState;
   }
   // otherwise evaluate the stats transitions
@@ -162,7 +191,7 @@ void StateMachine::run(){
   //
 
   if (nextState != currentState) {
-    Serial.printf("Transition to: %s\n", stateList->get(nextState)->name);
+    DEBUGFSM("Transition to: %s\n", stateList->get(nextState)->name);
     if (getCurrentState()->exitLogic) getCurrentState()->exitLogic();
 
     executeOnce = true;
