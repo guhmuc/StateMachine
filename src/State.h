@@ -29,11 +29,17 @@ class State{
 	  State* onUpdate(void (*functionPointer)());
 	  State* onEntry(void (*functionPointer)());
 	  State* onExit(void (*functionPointer)());
+
 	  State* addTransition(bool (*c)(), State* s);
     State* addTransition(bool (*c)(), int stateNumber);
-	  State* setTimeout(unsigned long timeout_ms, State* s);
+	  
+    State* setTimeout(unsigned long timeout_ms, State* s);
+	  State* setTimeout(unsigned long timeout_ms, int stateNumber);
 	  State* setTimeout(unsigned long timeout_ms, bool (*c)(), State* s);
+    State* setTimeout(unsigned long timeout_ms, bool (*conditionFunction)(), int stateNumber);
+    
     State* setDebounce(unsigned long debounce_ms);
+    
     int evalTransitions();
     int evalTimeoutTransition();
     int execute();
@@ -43,12 +49,12 @@ class State{
     void (*entryLogic)();
     void (*exitLogic)();
 
+	  int index;
+    const char* name;
     LinkedList<struct Transition*> *transitions;
     Transition *timeoutTransition; 
     unsigned long timeout = 0;
     unsigned long debounce = 0;
-	  int index;
-    const char* name;
 };
 
 State::State(const char* name){
@@ -82,26 +88,7 @@ State* State::onExit(void (*functionPointer)()){
  * state is the state to transition to
  */
 State* State::addTransition(bool (*conditionFunction)(), State* s){
-  struct Transition* t = new Transition{conditionFunction,s->index};
-  transitions->add(t);
-  return this;
-}
-
-State* State::setTimeout(unsigned long timeout_ms, bool (*conditionFunction)(), State* s){
-  struct Transition* t = new Transition{conditionFunction,s->index};
-  timeoutTransition = t;
-  timeout = timeout_ms;
-  return this;
-}
-
-State* State::setTimeout(unsigned long timeout_ms, State* s){
-  setTimeout(timeout_ms, [](){return true;}, s);
-  return this;
-}
-
-State* State::setDebounce(unsigned long debounce_ms){
-  debounce = debounce_ms;
-  return this;
+  return addTransition(conditionFunction, s->index);
 }
 
 /*
@@ -113,8 +100,33 @@ State* State::setDebounce(unsigned long debounce_ms){
  * stateNumber is the number of the state to transition to
  */
 State* State::addTransition(bool (*conditionFunction)(), int stateNumber){
-  struct Transition* t = new Transition{conditionFunction,stateNumber};
+  struct Transition* t = new Transition{conditionFunction, stateNumber};
   transitions->add(t);
+  return this;
+}
+
+
+State* State::setTimeout(unsigned long timeout_ms, State* s){
+  return setTimeout(timeout_ms, s->index);
+}
+
+State* State::setTimeout(unsigned long timeout_ms,  int stateNumber){
+  return setTimeout(timeout_ms, [](){return true;}, stateNumber);
+}
+
+State* State::setTimeout(unsigned long timeout_ms, bool (*conditionFunction)(), State* s){
+  return setTimeout(timeout_ms, conditionFunction, s->index);
+}
+
+State* State::setTimeout(unsigned long timeout_ms, bool (*conditionFunction)(), int stateNumber){
+  struct Transition* t = new Transition{conditionFunction, stateNumber};
+  timeoutTransition = t;
+  timeout = timeout_ms;
+  return this;
+}
+
+State* State::setDebounce(unsigned long debounce_ms){
+  debounce = debounce_ms;
   return this;
 }
 
@@ -125,12 +137,8 @@ State* State::addTransition(bool (*conditionFunction)(), int stateNumber){
  * -1 if none evaluate to true ===> Returning index now instead to avoid confusion between first run and no transitions
  */
 int State::evalTransitions(){
-  if(transitions->size() == 0) return index;
-  bool result = false;
-  
-  for(int i=0;i<transitions->size();i++){
-    result = transitions->get(i)->conditionFunction();
-    if(result == true){
+  for(int i=0; i<transitions->size(); i++) {
+    if(transitions->get(i)->conditionFunction()){
       return transitions->get(i)->stateNumber;
     }
   }
@@ -138,24 +146,11 @@ int State::evalTransitions(){
 }
 
 int State::evalTimeoutTransition(){
-  if (!timeoutTransition) return index;
-  bool result = timeoutTransition->conditionFunction();
-  return result ? timeoutTransition->stateNumber : index; 
-}
-
-/*
- * Execute runs the stateLogic and then evaluates
- * all available transitions. The transition that
- * returns true is returned.
- */
-/*
-int State::execute(){
-  if (updateLogic) {
-    updateLogic();
+  if (timeoutTransition && timeoutTransition->conditionFunction()) {
+    return timeoutTransition->stateNumber;
   }
-  return evalTransitions();
+  return index;
 }
-*/
 
 /*
  * Method to dynamically set a transition
